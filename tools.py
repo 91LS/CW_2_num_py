@@ -53,12 +53,12 @@ def is_rule_inconsistent(rule, objects):
         return True
 
 
-def calculate_support(rule, objects):
+def calculate_support(rule, objects, eliminated):
     """Calculate support of rule and eliminate supporting objects"""
     support = 0
-    for decision_object in objects:
+    for object_index, decision_object in enumerate(objects):
         if has_object_fulfill_rule(rule, decision_object) and rule.decision == decision_object[-1]:
-            # decision_object.eliminated = True
+            eliminated.add(object_index)
             support += 1
     rule.support = support
 
@@ -67,21 +67,24 @@ def covering(decision_system):
     rules = []
     number_of_attributes = len(decision_system[0]) - 1  # number of attributes
     attributes_ids = [att for att in range(number_of_attributes)]  # list of attributes ids
-    eliminated = {}
+    eliminated = set()  # set
     for scale in range(number_of_attributes):
         scale += 1
-        for decision_object in decision_system:
+        for object_index, decision_object in enumerate(decision_system):
+            if object_index in eliminated:
+                continue
             combination_of_attributes = list(it.combinations(attributes_ids, scale))
             for combination in combination_of_attributes:
                 descriptors = get_descriptors(decision_object, combination)
                 decision = decision_object[-1]
                 rule = classes.Rule(descriptors, decision, scale)
                 if is_rule_inconsistent(rule, decision_system):
-                    calculate_support(rule, decision_system)
+                    calculate_support(rule, decision_system, eliminated)
                     rules.append(rule)
                     break
-
-        return rules
+            if len(eliminated) == decision_system.shape[0]:
+                break
+    return rules
 
 
 def rename_rules(rules, names):
@@ -91,4 +94,3 @@ def rename_rules(rules, names):
             real_values[key] = names[value]
         rule.descriptors = real_values
         rule.decision = names.get(rule.decision)
-    a = 0
