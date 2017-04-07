@@ -5,3 +5,9 @@
 .idea/workspace.xml
 __pycache__/tools.cpython-36.pyc
 transform_test.txt
+.idea/vcs.xml
+__pycache__/classes.cpython-36.pyc
+australian.txt
+classes.py
+nursery.txt
+test.txt
