@@ -35,20 +35,37 @@ def get_descriptors(decision_object, attributes):
     return descriptors
 
 
-def has_object_fulfill_rule(rule, decision_object):
+def has_object_fulfill_rule_old(rule, decision_object):
     """Return true if fulfill; return false if not"""
-    for key, value in rule.descriptors.items():
-        if value != decision_object[key]:
-            return False
+    matrix = np.fromiter((fulfill_condition(key, value, decision_object) for key, value in rule.descriptors.items()),
+                         dtype=np.bool)
+
+    if np.any(matrix == False):
+        return False
     else:
         return True
 
 
-def is_rule_inconsistent(rule, objects):
+def fulfill_condition(key, value, decision_object):
+    if value == decision_object[key]:
+        return True
+    else:
+        return False
+
+
+def is_rule_inconsistent_old(rule, objects):
     """Return true if inconsistent; return false if not"""
-    for decision_object in objects:
-        if has_object_fulfill_rule(rule, decision_object) and rule.decision != decision_object[-1]:
-            return False
+    matrix = np.fromiter((inconsistent_condition(decision_object, rule) for decision_object in objects), dtype=np.bool)
+
+    if np.any(matrix == False):
+        return False
+    else:
+        return True
+
+
+def inconsistent_condition(decision_object, rule):
+    if rule.decision != decision_object[-1] and has_object_fulfill_rule(rule, decision_object):
+        return False
     else:
         return True
 
@@ -82,7 +99,7 @@ def covering(decision_system):
                     calculate_support(rule, decision_system, eliminated)
                     rules.append(rule)
                     break
-            if len(eliminated) == decision_system.shape[0]:
+            if eliminated.__len__() == decision_system.shape[0]:
                 break
     return rules
 
@@ -94,3 +111,24 @@ def rename_rules(rules, names):
             real_values[key] = names[value]
         rule.descriptors = real_values
         rule.decision = names.get(rule.decision)
+
+"""------------------------------------------------------------"""
+
+
+def is_rule_inconsistent(rule, objects):
+    for decision_object in objects:
+        if rule.decision != decision_object[-1] and has_object_fulfill_rule(rule, decision_object):
+            return False
+    else:
+        return True
+
+
+
+def has_object_fulfill_rule(rule, decision_object):
+
+    for key, value in rule.descriptors.items():
+        if value != decision_object[key]:
+            return False
+    else:
+        return True
+

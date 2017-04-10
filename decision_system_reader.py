@@ -46,9 +46,9 @@ class MainFrame(Frame):
     def __get_decision_system(self):
         try:
             system_file = open(self.system_file_path)
-            decision_system, name_dictionary = tools.get_system_objects(system_file)
+            decision_system, names = tools.get_system_objects(system_file)
             rules = tools.covering(decision_system)
-            tools.rename_rules(rules, name_dictionary)
+            tools.rename_rules(rules, names)
             system_file.close()
         except FileNotFoundError:
             messagebox.showerror("Error", "Oops! File not found!")
