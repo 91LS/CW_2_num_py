@@ -1,6 +1,8 @@
-import numpy as np
 import itertools as it
 import classes
+from joblib import Parallel, delayed
+import multiprocessing
+
 
 
 def get_system_objects(system_file):
@@ -11,7 +13,7 @@ def get_system_objects(system_file):
     for line in system_file:
         if line.strip() != '':  # true if line isn't empty
             objects.append(get_object(line, unique_values))  # append Decision Object to list of objects
-    return np.array(objects, dtype=np.uint16), dict(zip(unique_values.values(), unique_values.keys()))
+    return objects, dict(zip(unique_values.values(), unique_values.keys()))
 
 
 def get_object(line, unique_values):
@@ -28,93 +30,6 @@ def get_object(line, unique_values):
 get_object.counter = 0
 
 
-def get_descriptors(decision_object, attributes):
-    descriptors = {}
-    for attribute in attributes:
-        descriptors[attribute] = decision_object[attribute]
-    return descriptors
-
-
-def has_object_fulfill_rule_old(rule, decision_object):
-    """Return true if fulfill; return false if not"""
-    matrix = np.fromiter((fulfill_condition(key, value, decision_object) for key, value in rule.descriptors.items()),
-                         dtype=np.bool)
-
-    if np.any(matrix == False):
-        return False
-    else:
-        return True
-
-
-def fulfill_condition(key, value, decision_object):
-    if value == decision_object[key]:
-        return True
-    else:
-        return False
-
-
-def is_rule_inconsistent_old(rule, objects):
-    """Return true if inconsistent; return false if not"""
-    matrix = np.fromiter((inconsistent_condition(decision_object, rule) for decision_object in objects), dtype=np.bool)
-
-    if np.any(matrix == False):
-        return False
-    else:
-        return True
-
-
-def inconsistent_condition(decision_object, rule):
-    if rule.decision != decision_object[-1] and has_object_fulfill_rule(rule, decision_object):
-        return False
-    else:
-        return True
-
-
-def calculate_support(rule, objects, eliminated):
-    """Calculate support of rule and eliminate supporting objects"""
-    support = 0
-    for object_index, decision_object in enumerate(objects):
-        if has_object_fulfill_rule(rule, decision_object) and rule.decision == decision_object[-1]:
-            eliminated.add(object_index)
-            support += 1
-    rule.support = support
-
-
-def covering(decision_system):
-    rules = []
-    number_of_attributes = len(decision_system[0]) - 1  # number of attributes
-    attributes_ids = [att for att in range(number_of_attributes)]  # list of attributes ids
-    eliminated = set()  # set
-    for scale in range(number_of_attributes):
-        scale += 1
-        for object_index, decision_object in enumerate(decision_system):
-            if object_index in eliminated:
-                continue
-            combination_of_attributes = list(it.combinations(attributes_ids, scale))
-            for combination in combination_of_attributes:
-                descriptors = get_descriptors(decision_object, combination)
-                decision = decision_object[-1]
-                rule = classes.Rule(descriptors, decision, scale)
-                if is_rule_inconsistent(rule, decision_system):
-                    calculate_support(rule, decision_system, eliminated)
-                    rules.append(rule)
-                    break
-            if eliminated.__len__() == decision_system.shape[0]:
-                break
-    return rules
-
-
-def rename_rules(rules, names):
-    for rule in rules:
-        real_values = {}
-        for key, value in rule.descriptors.items():
-            real_values[key] = names[value]
-        rule.descriptors = real_values
-        rule.decision = names.get(rule.decision)
-
-"""------------------------------------------------------------"""
-
-
 def is_rule_inconsistent(rule, objects):
     for decision_object in objects:
         if rule.decision != decision_object[-1] and has_object_fulfill_rule(rule, decision_object):
@@ -123,12 +38,166 @@ def is_rule_inconsistent(rule, objects):
         return True
 
 
-
 def has_object_fulfill_rule(rule, decision_object):
-
     for key, value in rule.descriptors.items():
         if value != decision_object[key]:
             return False
     else:
         return True
 
+
+def set_rule_support_and_eliminate(rule, objects, eliminated):
+    """Calculate support of rule and eliminate supporting objects"""
+    for index, decision_object in enumerate(objects):
+        if has_object_fulfill_rule(rule, decision_object) and rule.decision == decision_object[-1]:
+            eliminated.add(index)
+            rule.support += 1
+
+
+def end(number_of_eliminated, number_of_objects):
+    return number_of_eliminated == number_of_objects
+
+
+def covering(decision_system):
+    rules = []
+
+    number_of_attributes = len(decision_system[0]) - 1  # number of attributes
+    attributes = [attribute_index for attribute_index in range(number_of_attributes)]  # list of attributes ids
+    number_of_objects = decision_system.__len__()  # number of decision objects in decision system
+
+    eliminated = set()  # indexes of object that don't need to calculate
+
+    for scale in range(number_of_attributes):
+        scale += 1
+        combination_of_attributes = list(it.combinations(attributes, scale))
+        for index, decision_object in enumerate(decision_system):
+            if index in eliminated:
+                continue
+            for combination in combination_of_attributes:
+                rule = classes.Rule(combination, decision_object, scale)
+                if is_rule_inconsistent(rule, decision_system):
+                    set_rule_support_and_eliminate(rule, decision_system, eliminated)
+                    rules.append(rule)
+                    break
+            if end(eliminated.__len__(), number_of_objects):
+                return rules
+
+    return rules
+
+num_cores = multiprocessing.cpu_count()
+#----------------------------------------------------------------------------#
+def exhaustive(decision_system):
+
+    rules = []
+    number_of_attributes = len(decision_system[0]) - 1  # number of attributes
+    attributes = [att for att in range(number_of_attributes)]  # list of attributes ids
+
+    matrix = get_matrix(decision_system)
+
+    for index, matrix_object in enumerate(matrix):
+        for combination in all_combinations(attributes):
+            if not is_combination_in_row(matrix_object, combination):
+                rule = classes.Rule(combination, decision_system[index], combination.__len__())
+                if not is_rule_in_rules(rule, rules):
+                    set_rule_support(rule, decision_system)
+                    rules.append(rule)
+    return rules
+
+
+def get_matrix(decision_system):
+    matrix = []
+    for current_object in decision_system:
+        matrix.append(get_row(current_object, decision_system))
+    return matrix
+
+
+def get_row(current_object, decision_system):
+    row = []
+    for decision_object in decision_system:
+        row.append(get_cell(current_object, decision_object))
+    return row
+
+
+def get_cell(current_object, decision_object):
+    cell = []
+    if current_object[-1] == decision_object[-1]:
+        return cell
+    for index, attribute in enumerate(current_object):
+        if attribute == decision_object[index]:
+            cell.append(index)
+    return cell
+
+
+def all_combinations(attributes):
+    """Generator for all picks combinations."""
+    for scale in range(len(attributes)):
+        for combination in it.combinations(attributes, scale + 1):
+            yield combination
+
+
+def is_combination_in_cell(cell, combination):
+    for attribute in combination:
+        if attribute not in cell:
+            return False
+    return True
+
+
+def is_combination_in_row(row, combination):
+    for cell in row:
+        if is_combination_in_cell(cell, combination):
+            return True
+    return False
+
+
+def has_rule_contains_rule(first, second):
+    for key, value in second.descriptors.items():
+        if key not in first.descriptors or first.descriptors[key] != value:
+            return False
+    return True
+
+
+def is_rule_in_rules(rule, rules):
+    for added_rule in rules:
+        if has_rule_contains_rule(rule, added_rule):
+            return True
+    return False
+
+
+def set_rule_support(rule, objects):
+    """Calculate support of rule."""
+    for decision_object in objects:
+        if has_object_fulfill_rule(rule, decision_object) and rule.decision == decision_object[-1]:
+            rule.support += 1
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# ----------------------------------------------------------------------------#
+def rename_rules(rules, names):
+    for rule in rules:
+        real_values = {}
+        for key, value in rule.descriptors.items():
+            real_values[key] = names[value]
+        rule.descriptors = real_values
+        rule.decision = names.get(rule.decision)
+
+def print_rules(rules):
+    for rule in rules:
+        rule.print_rule()
+#----------------------------------------------------------------------------#
