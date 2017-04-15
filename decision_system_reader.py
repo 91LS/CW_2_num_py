@@ -47,7 +47,7 @@ class MainFrame(Frame):
         try:
             with open(self.system_file_path) as file:
                 decision_system, names = tools.get_system_objects(file)
-            rules = tools.exhaustive(decision_system)
+            rules = tools.lem2(decision_system)
             tools.rename_rules(rules, names)
             tools.print_rules(rules)
         except FileNotFoundError:

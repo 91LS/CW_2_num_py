@@ -1,8 +1,8 @@
 import itertools as it
 import classes
-from joblib import Parallel, delayed
-import multiprocessing
-
+import collections
+import numpy as np
+from typing import Dict
 
 
 def get_system_objects(system_file):
@@ -28,6 +28,35 @@ def get_object(line, unique_values):
     return decision_object
 
 get_object.counter = 0
+
+
+# ----------------------------------------------------------------------------
+
+
+def covering(decision_system):
+    rules = []
+
+    number_of_attributes = len(decision_system[0]) - 1  # number of attributes
+    attributes = [attribute_index for attribute_index in range(number_of_attributes)]  # list of attributes ids
+    number_of_objects = decision_system.__len__()  # number of decision objects in decision system
+
+    eliminated = set()  # indexes of object that don't need to calculate
+
+    for scale in range(number_of_attributes):
+        scale += 1
+        combination_of_attributes = list(it.combinations(attributes, scale))
+        for index, decision_object in enumerate(decision_system):
+            if index not in eliminated:
+                for combination in combination_of_attributes:
+                    rule = classes.Rule(combination, decision_object, scale)
+                    if is_rule_inconsistent(rule, decision_system):
+                        set_rule_support_and_eliminate(rule, decision_system, eliminated)
+                        rules.append(rule)
+                        break
+                if end(eliminated.__len__(), number_of_objects):
+                    return rules
+
+    return rules
 
 
 def is_rule_inconsistent(rule, objects):
@@ -58,37 +87,12 @@ def end(number_of_eliminated, number_of_objects):
     return number_of_eliminated == number_of_objects
 
 
-def covering(decision_system):
-    rules = []
+# ----------------------------------------------------------------------------
 
-    number_of_attributes = len(decision_system[0]) - 1  # number of attributes
-    attributes = [attribute_index for attribute_index in range(number_of_attributes)]  # list of attributes ids
-    number_of_objects = decision_system.__len__()  # number of decision objects in decision system
 
-    eliminated = set()  # indexes of object that don't need to calculate
-
-    for scale in range(number_of_attributes):
-        scale += 1
-        combination_of_attributes = list(it.combinations(attributes, scale))
-        for index, decision_object in enumerate(decision_system):
-            if index in eliminated:
-                continue
-            for combination in combination_of_attributes:
-                rule = classes.Rule(combination, decision_object, scale)
-                if is_rule_inconsistent(rule, decision_system):
-                    set_rule_support_and_eliminate(rule, decision_system, eliminated)
-                    rules.append(rule)
-                    break
-            if end(eliminated.__len__(), number_of_objects):
-                return rules
-
-    return rules
-
-num_cores = multiprocessing.cpu_count()
-#----------------------------------------------------------------------------#
 def exhaustive(decision_system):
-
     rules = []
+
     number_of_attributes = len(decision_system[0]) - 1  # number of attributes
     attributes = [att for att in range(number_of_attributes)]  # list of attributes ids
 
@@ -170,25 +174,82 @@ def set_rule_support(rule, objects):
             rule.support += 1
 
 
+# ----------------------------------------------------------------------------
+
+def lem2(decision_system):
+    number_of_attributes = len(decision_system[0]) - 1  # number of attributes
+    attributes = [att for att in range(number_of_attributes)]  # list of attributes ids
+    rules = []
+
+    unique_decisions = get_unique(decision[-1] for decision in decision_system)
+    for decision in unique_decisions:
+        eliminated = set()
+        concept_objects = get_concept_objects(decision_system, decision)
+        for index in range(concept_objects.__len__()):
+            if index not in eliminated:
+                descriptors = {}
+                att_tmp = attributes[:]
+                for att in attributes:
+                    add_descriptor(concept_objects, att_tmp, descriptors, att_tmp)
+                    mode_objects = get_mode_objects(concept_objects, descriptors)
+                    rule = classes.Rule(descriptors.keys(), mode_objects[0], descriptors.keys().__len__())
+                    if is_rule_inconsistent(rule, decision_system):
+                        set_rule_support(rule, mode_objects)
+                        eliminated.add(index)
+                        rules.append(rule)
+                    else:
+                        att_tmp.remove(att)
+        a = 2
 
 
 
+def get_mode_objects(concept_objects, mode_column):
+    mode_objects = []
+    for decision_object in concept_objects:
+        for key, value in mode_column.items():
+            if decision_object[key] == value:
+                mode_objects.append(decision_object)
+    return mode_objects
 
 
+def get_concept_objects(decision_system, decision):
+    concept_objects = []
+    for decision_object in decision_system:
+        if decision_object[-1] == decision:
+            concept_objects.append(decision_object)
+    return concept_objects
 
 
+def add_descriptor(concept_objects, attributes, descriptors, att_tmp):
+    mode_descriptor = []
+    most_common = 0
+
+    for attribute in attributes:
+        column = get_concept_column(concept_objects, attribute)
+        mode = collections.Counter(column).most_common(1)  # out: [(value, count)]
+        if mode[0][1] > most_common:
+            most_common = mode[0][1]
+            mode_descriptor = [attribute, mode[0][0]]
+    att_tmp.remove(mode_descriptor[0])
+    descriptors[mode_descriptor[0]] = mode_descriptor[1]
 
 
+def get_concept_column(concept_objects, attribute):
+    """Generator for decision objects with decision."""
+    column = []
+    for decision_object in concept_objects:
+        column.append(decision_object[attribute])
+    return column
 
 
-
-
-
-
-
-
-
-# ----------------------------------------------------------------------------#
+def get_unique(array):
+    """Return list of unique values"""
+    unique = []
+    for number in array:
+        if number not in unique:
+            unique.append(number)
+    return unique
+# ----------------------------------------------------------------------------
 def rename_rules(rules, names):
     for rule in rules:
         real_values = {}
@@ -200,4 +261,14 @@ def rename_rules(rules, names):
 def print_rules(rules):
     for rule in rules:
         rule.print_rule()
-#----------------------------------------------------------------------------#
+# ----------------------------------------------------------------------------
+
+'''
+def get_mode_objects(objects, decision, mode_column: Dict):
+    mode_objects = []
+    for decision_object in objects:
+        for key, value in mode_column.items():
+            if decision_object[-1] == decision and decision_object[key] == value:
+                mode_objects.append(decision_object)
+    return mode_objects
+'''

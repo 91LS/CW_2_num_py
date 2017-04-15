@@ -16,3 +16,4 @@ __pycache__/reader.cpython-36.pyc
 build/temp.win32-3.6/Release/reader.cp36-win32.exp
 build/temp.win32-3.6/Release/reader.cp36-win32.lib
 build/temp.win32-3.6/Release/reader.obj
+test_lem2.txt
