@@ -75,10 +75,10 @@ class MainFrame(Frame):
 
     def insert_rules(self, rules):
         self.tree.delete(*self.tree.get_children())
-        self.tree.insert("", 1, 1, text="All classes", values=rules.__len__())
+        self.tree.insert("", 1, 1, text="All orders", values=rules.__len__())
         scales = tools.get_scales(rules)
         for scale in scales:
-            self.tree.insert(1, scale+1, scale+1, text="Scale {}".format(scale),
+            self.tree.insert(1, scale+1, scale+1, text="Order {}".format(scale),
                              values=tools.get_rule_scale_length(rules, scale))
             for string_rule in tools.scale_rules(rules, scale):
                 self.tree.insert(scale+1, scale+1, text=string_rule)
