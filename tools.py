@@ -176,6 +176,7 @@ def set_rule_support(rule, objects):
 
 # ----------------------------------------------------------------------------
 
+
 def lem2(decision_system):
     number_of_attributes = len(decision_system[0]) - 1  # number of attributes
     attributes = [att for att in range(number_of_attributes)]  # list of attributes ids
@@ -183,30 +184,59 @@ def lem2(decision_system):
 
     unique_decisions = get_unique(decision[-1] for decision in decision_system)
     for decision in unique_decisions:
-        eliminated = set()
         concept_objects = get_concept_objects(decision_system, decision)
-        for index in range(concept_objects.__len__()):
-            if index not in eliminated:
-                descriptors = {}
-                att_tmp = attributes[:]
-                for att in attributes:
-                    add_descriptor(concept_objects, att_tmp, descriptors, att_tmp)
-                    mode_objects = get_mode_objects(concept_objects, descriptors)
-                    rule = classes.Rule(descriptors.keys(), mode_objects[0], descriptors.keys().__len__())
-                    if is_rule_inconsistent(rule, decision_system):
-                        set_rule_support(rule, mode_objects)
-                        eliminated.add(index)
-                        rules.append(rule)
-                    else:
-                        att_tmp.remove(att)
-        a = 2
+        while concept_objects:
+            descriptors = {}
+            tmp_attributes = attributes[:]
+
+            descriptor = get_descriptor(concept_objects, tmp_attributes)
+            add_descriptor(descriptors, descriptor)
+            remove_attribute(tmp_attributes, descriptor)
+            mode_objects = get_mode_objects(concept_objects, descriptors)
+            rule = classes.Rule(descriptors.keys(), mode_objects[0], descriptors.keys().__len__())
+            if not is_rule_inconsistent(rule, decision_system):
+                find_deeper(mode_objects, descriptors, concept_objects, tmp_attributes, decision_system, rules)
+            else:
+                set_rule_support_lem(rule, mode_objects, concept_objects)
+                rules.append(rule)
+    return rules
 
 
+def find_deeper(mode_objects, descriptors, concept_objects, tmp_attributes, decision_system, rules):
+    descriptor = get_descriptor(mode_objects, tmp_attributes)
+    add_descriptor(descriptors, descriptor)
+    remove_attribute(tmp_attributes, descriptor)
+    mode_objects = get_mode_objects(mode_objects, descriptor)
+    rule = classes.Rule(descriptors.keys(), mode_objects[0], descriptors.keys().__len__())
+    if not is_rule_inconsistent(rule, decision_system):
+        find_deeper(mode_objects, descriptors, concept_objects, tmp_attributes, decision_system, rules)
+    else:
+        set_rule_support_lem(rule, mode_objects, concept_objects)
+        rules.append(rule)
 
-def get_mode_objects(concept_objects, mode_column):
+
+def remove_attribute(attriubutes, descriptor):
+    for att in descriptor:
+        attriubutes.remove(att)
+
+
+def add_descriptor(descriptors, descriptor):
+    for key, value in descriptor.items():
+        descriptors[key] = value
+
+
+def set_rule_support_lem(rule, mode_objects, concept_objects):
+    """Calculate support of rule."""
+    for decision_object in mode_objects:
+        if has_object_fulfill_rule(rule, decision_object) and rule.decision == decision_object[-1]:
+            concept_objects.remove(decision_object)
+            rule.support += 1
+
+
+def get_mode_objects(concept_objects, descriptors):
     mode_objects = []
     for decision_object in concept_objects:
-        for key, value in mode_column.items():
+        for key, value in descriptors.items():
             if decision_object[key] == value:
                 mode_objects.append(decision_object)
     return mode_objects
@@ -220,8 +250,8 @@ def get_concept_objects(decision_system, decision):
     return concept_objects
 
 
-def add_descriptor(concept_objects, attributes, descriptors, att_tmp):
-    mode_descriptor = []
+def get_descriptor(concept_objects, attributes):
+    mode_descriptor = {}
     most_common = 0
 
     for attribute in attributes:
@@ -229,9 +259,8 @@ def add_descriptor(concept_objects, attributes, descriptors, att_tmp):
         mode = collections.Counter(column).most_common(1)  # out: [(value, count)]
         if mode[0][1] > most_common:
             most_common = mode[0][1]
-            mode_descriptor = [attribute, mode[0][0]]
-    att_tmp.remove(mode_descriptor[0])
-    descriptors[mode_descriptor[0]] = mode_descriptor[1]
+            mode_descriptor = {attribute: mode[0][0]}
+    return mode_descriptor
 
 
 def get_concept_column(concept_objects, attribute):
@@ -249,6 +278,8 @@ def get_unique(array):
         if number not in unique:
             unique.append(number)
     return unique
+
+
 # ----------------------------------------------------------------------------
 def rename_rules(rules, names):
     for rule in rules:
@@ -262,13 +293,3 @@ def print_rules(rules):
     for rule in rules:
         rule.print_rule()
 # ----------------------------------------------------------------------------
-
-'''
-def get_mode_objects(objects, decision, mode_column: Dict):
-    mode_objects = []
-    for decision_object in objects:
-        for key, value in mode_column.items():
-            if decision_object[-1] == decision and decision_object[key] == value:
-                mode_objects.append(decision_object)
-    return mode_objects
-'''
